@@ -594,7 +594,7 @@ inline std::tuple<std::vector<int>, std::vector<int>, bi_decomposition> best_var
 {
   if ( xor_cost )
   {
-    if ( ( x_xor.first.size() != 0 ) & ( x_xor.second.size() != 0 ) )
+    if ( ( x_xor.first.size() != 0 ) && ( x_xor.second.size() != 0 ) )
     {
       return std::make_tuple( x_xor.first, x_xor.second, bi_decomposition::xor_ );
     }
