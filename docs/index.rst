@@ -37,6 +37,7 @@ Welcome to kitty's documentation!
    esop
    isop
    cnf
+   spfd
    traits
    reference
 
