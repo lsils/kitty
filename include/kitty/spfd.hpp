@@ -33,10 +33,8 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
 
 #include "constructors.hpp"
-#include "traits.hpp"
 
 namespace kitty
 {
