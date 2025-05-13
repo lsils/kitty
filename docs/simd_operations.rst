@@ -1,9 +1,6 @@
 Single Instruction Multiple Data Operations
 ===========================================
 
-Dynamic truth table
--------------------
-
 The header ``<kitty/simd_operations.hpp>`` implements bitwise operations
 that are optimized through vectorization, if supported by the machine on
 which the code is compiled. It is suggested to replace the traditional 
