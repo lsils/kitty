@@ -16,6 +16,16 @@ if (HAS_FCOLOR_DIAGNOSTICS)
   add_compile_options(-fcolor-diagnostics)
 endif()
 
+# compiler options for SIMD operations
+if(MSVC)
+  add_compile_options(/arch:AVX2)
+elseif(UNIX)
+  check_cxx_compiler_flag("-mavx2" HAS_MAVX2)
+  if(HAS_MAVX2)
+    add_compile_options(-mavx2)
+  endif()
+endif()
+
 if (UNIX)
   add_compile_options(-W -Wall)
 else()

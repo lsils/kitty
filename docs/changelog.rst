@@ -4,6 +4,9 @@ Change Log
 Next release
 ------------
 
+* SIMD operations: header ``simd_operations`` (contributed by Andrea Costamagna)
+  `#133 <https://github.com/msoeken/kitty/pull/142>`_
+
 v0.8 (September 9, 2022)
 ------------------------
 

@@ -55,6 +55,7 @@
 #include "permutation.hpp"
 #include "print.hpp"
 #include "properties.hpp"
+#include "simd_operations.hpp"
 #include "spectral.hpp"
 #include "spp.hpp"
 #include "traits.hpp"
