@@ -38,6 +38,8 @@ using namespace kitty;
 
 class SIMDTest : public kitty::testing::Test
 {
+  static constexpr auto num_cases = 20u;
+
 protected:
   template<typename FnSisd, typename FnSimd, typename TT>
   void test_noreturn( FnSisd fn_sisd, FnSimd fn_simd, TT& tt ) const
@@ -47,7 +49,7 @@ protected:
     double time_diff = 0;
     double time_sisd = 0;
     double time_simd = 0;
-    for ( auto i = 0u; i < 20u; ++i )
+    for ( auto i = 0u; i < num_cases; ++i )
     {
       create_random( tt1 );
       tt2 = tt1;
@@ -55,12 +57,12 @@ protected:
       run_noreturn_with_time<FnSisd, TT>( fn_sisd, tt1, time_sisd );
       run_noreturn_with_time<FnSimd, TT>( fn_simd, tt2, time_simd );
 
-      time_diff += ( time_simd - time_sisd ) / time_sisd;
+      time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, 0 );
+      EXPECT_LE( time_diff, -0.2 );
     }
 #endif
   }
@@ -72,7 +74,7 @@ protected:
     double time_sisd = 0;
     double time_simd = 0;
     TT tt1 = tt.construct();
-    for ( auto i = 0u; i < 20u; ++i )
+    for ( auto i = 0u; i < num_cases; ++i )
     {
       create_random( tt1 );
 
@@ -80,12 +82,12 @@ protected:
       auto res_simd = run_with_time<FnSimd, TT>( fn_simd, tt1, time_simd );
       EXPECT_EQ( res_simd, res_sisd );
 
-      time_diff += ( time_simd - time_sisd ) / time_sisd;
+      time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, 0 );
+      EXPECT_LE( time_diff, -0.1 );
     }
 #endif
   }
@@ -98,7 +100,7 @@ protected:
     double time_simd = 0;
     TT tt1 = tt.construct();
     TT tt2 = tt.construct();
-    for ( auto i = 0u; i < 20u; ++i )
+    for ( auto i = 0u; i < num_cases; ++i )
     {
       create_random( tt1 );
 
@@ -106,12 +108,12 @@ protected:
       auto res_simd = run_with_time<FnSimd, TT>( fn_simd, tt1, tt2, time_simd );
       EXPECT_EQ( res_simd, res_sisd );
 
-      time_diff += ( time_simd - time_sisd ) / time_sisd;
+      time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, 0 );
+      EXPECT_LE( time_diff, -0.2 );
     }
 #endif
   }
