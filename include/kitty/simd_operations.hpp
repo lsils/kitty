@@ -25,7 +25,7 @@
 
 /*!
   \file simd_operations.hpp
-  \brief Implements efficient alternatives of some common operations using SIMD
+  \brief Implements efficient alternatives of common truth-table operations.
 
   \author Andrea Costamagna
 */
@@ -36,6 +36,7 @@
 #include <cassert>
 #include <numeric>
 #include <algorithm>
+#include <functional>
 
 #include "static_truth_table.hpp"
 #include "partial_truth_table.hpp"
@@ -97,7 +98,7 @@ inline bool has_avx2_cached()
 #endif
 }
 
-/*! Enumeration type to minimize code redundancies. */
+/*! \brief Enumeration for compile-time dispatch and minimize code redundancies. */
 enum class BinaryOp
 {
   AND,
@@ -106,51 +107,81 @@ enum class BinaryOp
   LT
 };
 
-/*! Compile-time dispatch of the binary operations. */
+/*! Compile-time dispatch of the vector operations. */
 #if KITTY_HAS_AVX2
-template<BinaryOp binary_op>
-inline __m256i get_simd_op( __m256i vr, __m256i v2 )
+template<BinaryOp Op>
+constexpr auto vector_operation()
 {
-  if constexpr ( binary_op == BinaryOp::AND )
-    return _mm256_and_si256( vr, v2 );
-  else if constexpr ( binary_op == BinaryOp::OR )
-    return _mm256_or_si256( vr, v2 );
-  else if constexpr ( binary_op == BinaryOp::XOR )
-    return _mm256_xor_si256( vr, v2 );
-  else if constexpr ( binary_op == BinaryOp::LT )
-    return _mm256_andnot_si256( vr, v2 );
-  else
-    static_assert( binary_op != binary_op, "Unsupported BinaryOp" );
+  if constexpr ( Op == BinaryOp::AND )
+    return []( __m256i a, __m256i b )
+    { return _mm256_and_si256( a, b ); };
+  else if constexpr ( Op == BinaryOp::OR )
+    return []( __m256i a, __m256i b )
+    { return _mm256_or_si256( a, b ); };
+  else if constexpr ( Op == BinaryOp::XOR )
+    return []( __m256i a, __m256i b )
+    { return _mm256_xor_si256( a, b ); };
+  else if constexpr ( Op == BinaryOp::LT )
+    return []( __m256i a, __m256i b )
+    { return _mm256_andnot_si256( a, b ); };
 }
 #endif
 
-/*! Perform the vectorized version of the binary operations using AVX2. */
-template<BinaryOp binary_op, typename TT, typename ScalarOp>
-inline TT bitwise_binop( const TT& tta, const TT& ttb, ScalarOp&& scalar_op )
+/*! Compile-time dispatch of the scalar operations. */
+template<BinaryOp Op, typename T>
+constexpr auto scalar_operation()
+{
+  if constexpr ( Op == BinaryOp::AND )
+    return std::bit_and<T>{};
+  else if constexpr ( Op == BinaryOp::OR )
+    return std::bit_or<T>{};
+  else if constexpr ( Op == BinaryOp::XOR )
+    return std::bit_xor<T>{};
+  else if constexpr ( Op == BinaryOp::LT )
+    return []( T a, T b )
+    { return ~a & b; };
+}
+
+/*! \brief Universal function for vectorized operations between two truth tables.
+ *
+ * Computes the bitwise operation \f$tt_a Op tt_b\f$ using 256-bit AVX2 registers.
+ * Each register processes four 64-bit words in parallel, enabling efficient
+ * parallel computation across the truth tables. When the number of bits is not
+ * a multiple of four, the function fallsback to the scalar version on the tailing
+ * words.
+ *
+ * \tparam Op Binary operation.
+ * \tparam TT Truth table type.
+ * \param tta First truth table.
+ * \param ttb Second truth table.
+ * \return The truth table obtained by applying Op.
+ */
+template<BinaryOp Op, typename TT>
+inline TT binary_operation( const TT& tta, const TT& ttb )
 {
   TT result = tta;
   size_t size = tta.num_blocks();
   auto& datar = result._bits;
   const auto& data2 = ttb._bits;
+  using T = typename std::decay_t<decltype( datar[0] )>;
 
   size_t i = 0;
 #if KITTY_HAS_AVX2
   if ( has_avx2_cached() && size >= 4 )
   {
-    for ( ; i + 4 <= size; i += 4 )
+    auto binary_op = vector_operation<Op>();
+    for ( ; i + 3 < size; i += 4 )
     {
       __m256i vr = _mm256_loadu_si256( reinterpret_cast<const __m256i*>( &datar[i] ) );
       __m256i v2 = _mm256_loadu_si256( reinterpret_cast<const __m256i*>( &data2[i] ) );
-      vr = get_simd_op<binary_op>( vr, v2 );
+      vr = binary_op( vr, v2 );
       _mm256_storeu_si256( reinterpret_cast<__m256i*>( &datar[i] ), vr );
     }
   }
 #endif
-  /* Fallback to the scalar version for the remaining elements. */
-  for ( ; i < size; ++i )
-  {
-    datar[i] = scalar_op( datar[i], data2[i] );
-  }
+  /* Fallback to the scalar version for the remaining words. */
+  auto scalar_op = scalar_operation<Op, T>();
+  std::transform( datar.cbegin() + i, datar.cend(), data2.cbegin() + i, datar.begin() + i, scalar_op );
 
   result.mask_bits();
   return result;
@@ -162,16 +193,15 @@ inline TT bitwise_binop( const TT& tta, const TT& ttb, ScalarOp&& scalar_op )
  * Each register processes four 64-bit words in parallel, enabling efficient
  * parallel computation across the truth tables.
  *
+ * \tparam TT Truth table type.
  * \param tta First truth table.
  * \param ttb Second truth table.
+ * \return The truth table obtained by applying the binary AND.
  */
 template<typename TT>
 inline TT bitwise_and( const TT& tta, const TT& ttb )
 {
-  return bitwise_binop<BinaryOp::AND>(
-      tta, ttb,
-      []( uint64_t a, uint64_t b )
-      { return a & b; } );
+  return binary_operation<BinaryOp::AND>( tta, ttb );
 }
 
 /*! \brief Perform a vectorized bitwise OR between two truth tables.
@@ -180,16 +210,15 @@ inline TT bitwise_and( const TT& tta, const TT& ttb )
  * Each register processes four 64-bit words in parallel, enabling efficient
  * parallel computation across the truth tables.
  *
+ * \tparam TT Truth table type.
  * \param tta First truth table.
  * \param ttb Second truth table.
+ * \return The truth table obtained by applying the binary OR.
  */
 template<typename TT>
 inline TT bitwise_or( const TT& tta, const TT& ttb )
 {
-  return bitwise_binop<BinaryOp::OR>(
-      tta, ttb,
-      []( uint64_t a, uint64_t b )
-      { return a | b; } );
+  return binary_operation<BinaryOp::OR>( tta, ttb );
 }
 
 /*! \brief Perform a vectorized bitwise XOR between two truth tables.
@@ -198,16 +227,15 @@ inline TT bitwise_or( const TT& tta, const TT& ttb )
  * Each register processes four 64-bit words in parallel, enabling efficient
  * parallel computation across the truth tables.
  *
+ * \tparam TT Truth table type.
  * \param tta First truth table.
  * \param ttb Second truth table.
+ * \return The truth table obtained by applying the binary XOR.
  */
 template<typename TT>
 inline TT bitwise_xor( const TT& tta, const TT& ttb )
 {
-  return bitwise_binop<BinaryOp::XOR>(
-      tta, ttb,
-      []( uint64_t a, uint64_t b )
-      { return a ^ b; } );
+  return binary_operation<BinaryOp::XOR>( tta, ttb );
 }
 
 /*! \brief Perform a vectorized bitwise LT ( Lower Than ) between two truth tables.
@@ -216,16 +244,15 @@ inline TT bitwise_xor( const TT& tta, const TT& ttb )
  * Each register processes four 64-bit words in parallel, enabling efficient
  * parallel computation across the truth tables.
  *
+ * \tparam TT Truth table type.
  * \param tta First truth table.
  * \param ttb Second truth table.
+ * \return The truth table obtained by applying the binary LT.
  */
 template<typename TT>
 inline TT bitwise_lt( const TT& tta, const TT& ttb )
 {
-  return bitwise_binop<BinaryOp::LT>(
-      tta, ttb,
-      []( uint64_t a, uint64_t b )
-      { return ~a & b; } );
+  return binary_operation<BinaryOp::LT>( tta, ttb );
 }
 
 /*! \brief Perform a vectorized inversion of a truth tables.
@@ -234,7 +261,9 @@ inline TT bitwise_lt( const TT& tta, const TT& ttb )
  * Each register processes four 64-bit words in parallel, enabling efficient
  * parallel inversion across the truth tables.
  *
+ * \tparam TT Truth table type.
  * \param tt Truth table.
+ * \return The negated truth table.
  */
 template<typename TT>
 inline TT unary_not( const TT& tt )
@@ -248,7 +277,7 @@ inline TT unary_not( const TT& tt )
   if ( has_avx2_cached() )
   {
     const __m256i all_ones = _mm256_set1_epi64x( -1 );
-    for ( ; i + 4 <= size; i += 4 )
+    for ( ; i + 3 < size; i += 4 )
     {
       __m256i v = _mm256_loadu_si256( reinterpret_cast<const __m256i*>( &data[i] ) );
       v = _mm256_xor_si256( v, all_ones );
@@ -257,16 +286,23 @@ inline TT unary_not( const TT& tt )
   }
 #endif
 
-  for ( ; i < size; ++i )
-  {
-    data[i] = ~data[i];
-  }
+  std::transform( data.cbegin() + i, data.cend(), result.begin() + i, std::bit_not<>() );
+
   result.mask_bits();
   return result;
 }
 
-/*! Vectorized set of a truth-table to a constant value. */
-template<typename TT, uint32_t VAL>
+/*! \brief Vectorized set of a truth-table to a constant value.
+ *
+ * Assign the bits of a truth table to a constant using 256-bit AVX2 registers.
+ * Each register processes four 64-bit words in parallel, enabling efficient
+ * parallel assignment across the truth tables.
+ *
+ * \tparam TT Truth table type.
+ * \tparam Const Constant value to be assigned ( 0 for contradiction, anything for tautology ).
+ * \param tt Truth table.
+ */
+template<typename TT, uint32_t Const>
 inline void set_const( TT& tt )
 {
   size_t size = tt.num_blocks();
@@ -277,16 +313,16 @@ inline void set_const( TT& tt )
   if ( has_avx2_cached() )
   {
     __m256i v;
-    if constexpr ( VAL == 0 )
+    if constexpr ( Const == 0 )
     {
-      v = _mm256_setzero_si256(); // Set the vector to zero
+      v = _mm256_setzero_si256();
     }
     else
     {
       v = _mm256_set1_epi64x( -1 );
     }
 
-    for ( ; i + 4 <= size; i += 4 )
+    for ( ; i + 3 < size; i += 4 )
     {
       _mm256_storeu_si256( reinterpret_cast<__m256i*>( &data[i] ), v );
     }
@@ -294,7 +330,7 @@ inline void set_const( TT& tt )
 #endif
   uint64_t v;
 
-  if constexpr ( VAL == 0 )
+  if constexpr ( Const == 0 )
   {
     v = 0;
   }
@@ -304,10 +340,7 @@ inline void set_const( TT& tt )
   }
 
   // Handle remaining elements
-  for ( ; i < size; ++i )
-  {
-    data[i] = v;
-  }
+  std::fill( data.begin() + i, data.end(), v );
 }
 
 /*! \brief Reset all the bits of a truth table to 0 through vectorization.
@@ -316,6 +349,7 @@ inline void set_const( TT& tt )
  * Each register processes four 64-bit words in parallel, enabling efficiently
  * setting the truth table to the desird value.
  *
+ * \tparam TT Truth table type.
  * \param tt Truth table.
  */
 template<typename TT>
@@ -330,6 +364,7 @@ inline void set_zero( TT& tt )
  * Each register processes four 64-bit words in parallel, enabling efficiently
  * setting the truth table to the desird value.
  *
+ * \tparam TT truth table type.
  * \param tt Truth table.
  */
 template<typename TT>
@@ -338,35 +373,35 @@ inline void set_ones( TT& tt )
   set_const<TT, 1>( tt );
 }
 
-/*! Implementation of unary NOT for small static truth tables for compatibility. */
+/*! Fallback to the default unary NOT for small static truth tables. */
 template<uint32_t NumVars>
 inline kitty::static_truth_table<NumVars> unary_not( kitty::static_truth_table<NumVars, true> const& tt )
 {
   return ~tt;
 }
 
-/*! Implementation of bitwise AND for small static truth tables for compatibility. */
+/*! Fallback to the default bitwise AND for small static truth tables. */
 template<uint32_t NumVars>
 inline kitty::static_truth_table<NumVars> bitwise_and( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta & ttb;
 }
 
-/*! Implementation of bitwise OR for small static truth tables for compatibility. */
+/*! Fallback to the default bitwise OR for small static truth tables. */
 template<uint32_t NumVars>
 inline kitty::static_truth_table<NumVars> bitwise_or( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta | ttb;
 }
 
-/*! Implementation of bitwise XOR for small static truth tables for compatibility. */
+/*! Fallback to the default bitwise XOR for small static truth tables. */
 template<uint32_t NumVars>
 inline kitty::static_truth_table<NumVars> bitwise_xor( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta ^ ttb;
 }
 
-/*! Implementation of bitwise LT for small static truth tables for compatibility. */
+/*! Fallback to the default bitwise LT for small static truth tables. */
 template<uint32_t NumVars>
 inline kitty::static_truth_table<NumVars> bitwise_lt( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
