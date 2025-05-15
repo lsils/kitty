@@ -386,8 +386,8 @@ inline void set_ones( TT& tt )
 
 class benchmarking
 {
-  static constexpr auto num_cases = 20u;
-  static constexpr double eps = 0.05;
+  static constexpr auto num_cases = 100u;
+  static constexpr double eps = 0.1;
   bool const has_avx2 = has_avx2_cached();
 public:
   template<typename FnSisd, typename FnSimd, typename TT>

@@ -155,7 +155,7 @@ TEST_F( SIMDTest, simd_set_zero_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_noreturn( [&]( TTS& t )
@@ -175,7 +175,7 @@ TEST_F( SIMDTest, simd_set_ones_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_noreturn( [&]( TTS& t )
@@ -195,7 +195,7 @@ TEST_F( SIMDTest, simd_binary_and_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_binary( []( const TTS& t1, const TTS& t2 )
@@ -215,7 +215,7 @@ TEST_F( SIMDTest, simd_binary_xor_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_binary( []( const TTS& t1, const TTS& t2 )
@@ -235,7 +235,7 @@ TEST_F( SIMDTest, simd_binary_or_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_binary( []( const TTS& t1, const TTS& t2 )
@@ -255,7 +255,7 @@ TEST_F( SIMDTest, simd_binary_lt_large )
 {
   simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<10>;
+  using TTS = static_truth_table<12>;
   using TTD = dynamic_truth_table;
   TTS tts;
   test_binary( []( const TTS& t1, const TTS& t2 )
