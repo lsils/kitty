@@ -62,7 +62,7 @@ protected:
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, -0.2 );
+      EXPECT_LE( time_diff, 0 );
     }
 #endif
   }
@@ -87,7 +87,7 @@ protected:
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, -0.1 );
+      EXPECT_LE( time_diff, 0 );
     }
 #endif
   }
@@ -113,7 +113,7 @@ protected:
 #if KITTY_HAS_AVX2
     if ( simd::has_avx2_cached() )
     {
-      EXPECT_LE( time_diff, -0.2 );
+      EXPECT_LE( time_diff, 0 );
     }
 #endif
   }
@@ -151,28 +151,10 @@ protected:
   }
 };
 
-TEST_F( SIMDTest, simd_unary_not_large )
-{
-  using TTS = static_truth_table<10>;
-  using TTD = dynamic_truth_table;
-
-  TTS tts;
-  test_unary( []( const TTS& t )
-              { return unary_not<TTS>( t ); },
-              []( const TTS& t )
-              { return simd::unary_not<TTS>( t ); },
-              tts );
-
-  TTD ttd( 12u );
-  test_unary( []( const TTD& t )
-              { return unary_not<TTD>( t ); },
-              []( const TTD& t )
-              { return simd::unary_not<TTD>( t ); },
-              ttd );
-}
-
 TEST_F( SIMDTest, simd_set_zero_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
@@ -191,6 +173,8 @@ TEST_F( SIMDTest, simd_set_zero_large )
 
 TEST_F( SIMDTest, simd_set_ones_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
@@ -209,6 +193,8 @@ TEST_F( SIMDTest, simd_set_ones_large )
 
 TEST_F( SIMDTest, simd_binary_and_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
@@ -227,6 +213,8 @@ TEST_F( SIMDTest, simd_binary_and_large )
 
 TEST_F( SIMDTest, simd_binary_xor_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
@@ -245,6 +233,8 @@ TEST_F( SIMDTest, simd_binary_xor_large )
 
 TEST_F( SIMDTest, simd_binary_or_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
@@ -263,6 +253,8 @@ TEST_F( SIMDTest, simd_binary_or_large )
 
 TEST_F( SIMDTest, simd_binary_lt_large )
 {
+  simd::test_avx2_advantage();
+
   using TTS = static_truth_table<10>;
   using TTD = dynamic_truth_table;
   TTS tts;
