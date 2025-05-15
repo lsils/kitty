@@ -344,7 +344,7 @@ inline uint64_t count_ones( const TT& tt )
   return std::accumulate( tt.cbegin(), tt.cend(), uint64_t( 0 ),
                           []( auto accu, auto word )
                           {
-                            return accu + __builtin_popcount( word & 0xffffffff ) + __builtin_popcount( word >> 32 );
+                            return accu + __builtin_popcountll( word );
                           } );
 }
 
@@ -352,7 +352,7 @@ inline uint64_t count_ones( const TT& tt )
 template<uint32_t NumVars>
 inline uint64_t count_ones( const static_truth_table<NumVars, true>& tt )
 {
-  return __builtin_popcount( tt._bits & 0xffffffff ) + __builtin_popcount( tt._bits >> 32 );
+  return __builtin_popcountll( tt._bits );
 }
 /*! \endcond */
 
