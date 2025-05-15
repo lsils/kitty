@@ -158,6 +158,15 @@ void create_nth_var( static_truth_table<NumVars, true>& tt, uint8_t var_index, b
   /* mask if truth table does not require all bits */
   tt.mask_bits();
 }
+
+template<uint32_t NumVars>
+void create_nth_var( ternary_truth_table<static_truth_table<NumVars, true>>& tt, uint8_t var_index, bool complement = false )
+{
+  create_nth_var( tt._bits, var_index, complement );
+  tt._care = ~( tt._bits.construct() );
+  /* mask if truth table does not require all bits */
+  tt.mask_bits();
+}
 /*! \endcond */
 
 /*! \brief Constructs projections (single-variable functions) out-of-place

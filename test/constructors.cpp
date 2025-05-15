@@ -31,6 +31,7 @@
 #include <kitty/constructors.hpp>
 #include <kitty/dynamic_truth_table.hpp>
 #include <kitty/static_truth_table.hpp>
+#include <kitty/ternary_truth_table.hpp>
 #include <kitty/partial_truth_table.hpp>
 
 using namespace kitty;
@@ -51,6 +52,7 @@ TEST( ConstructorsTest, create_nth_var5 )
 {
   static_truth_table<5> tt_s;
   dynamic_truth_table tt_d( 5 );
+  ternary_truth_table<static_truth_table<5>> tt_t;
 
   const auto mask = 0xffffffff;
 
@@ -60,6 +62,8 @@ TEST( ConstructorsTest, create_nth_var5 )
     EXPECT_EQ( tt_s._bits, detail::projections[i] & mask );
     create_nth_var( tt_d, i );
     EXPECT_EQ( tt_s._bits, tt_d._bits[0] );
+    create_nth_var( tt_t, i );
+    EXPECT_EQ( tt_t._bits, tt_s );
   }
 }
 
