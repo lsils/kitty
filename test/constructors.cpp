@@ -67,6 +67,23 @@ TEST( ConstructorsTest, create_nth_var5 )
   }
 }
 
+TEST( ConstructorsTest, create_nth_var7 )
+{
+  static_truth_table<7> tt_s;
+  dynamic_truth_table tt_d( 7 );
+  ternary_truth_table<static_truth_table<7>> tt_t;
+
+  for ( auto i = 0; i <= 4; ++i )
+  {
+    create_nth_var( tt_s, i );
+    EXPECT_EQ( tt_s._bits[0], detail::projections[i] );
+    create_nth_var( tt_d, i );
+    EXPECT_EQ( tt_s._bits[0], tt_d._bits[0] );
+    create_nth_var( tt_t, i );
+    EXPECT_EQ( tt_t._bits, tt_s );
+  }
+}
+
 TEST( ConstructorsTest, create_from_binary_string )
 {
   static_truth_table<3> tt_s, tt_s_str;
