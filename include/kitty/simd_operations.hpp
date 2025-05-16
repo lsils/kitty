@@ -32,11 +32,13 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cassert>
-#include <numeric>
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <functional>
+#include <mutex>
+#include <numeric>
+#include <unordered_map>
 
 #include "operators.hpp"
 #include "static_truth_table.hpp"
@@ -114,8 +116,8 @@ inline bool has_avx2_cached()
 }
 
 /*! Check if AVX2 is supported on this machine. */
-template<Operation Op>
-inline bool use_avx2_cached();
+template<Operation Op, typename TT>
+inline bool use_avx2_cached( TT const&, uint32_t );
 
 /*! Compile-time dispatch of the vector operations. */
 #if KITTY_HAS_AVX2
@@ -177,7 +179,7 @@ inline TT binary_operation( const TT& tta, const TT& ttb )
   size_t i = 0;
 #if KITTY_HAS_AVX2
   size_t size = tta.num_blocks();
-  if ( has_avx2_cached() && size >= 4 && ( !UseCache || use_avx2_cached<Op>() ) )
+  if ( has_avx2_cached() && size >= 4 && ( !UseCache || use_avx2_cached<Op, TT>( tta, tta.num_vars() ) ) )
   {
     auto binary_op = vector_operation<Op>();
     for ( ; i + 3 < size; i += 4 )
@@ -209,7 +211,7 @@ inline TT binary_operation( const TT& tta, const TT& ttb )
  * \return The truth table obtained by applying the binary AND.
  */
 template<typename TT, bool UseCache = true>
-inline TT bitwise_and( const TT& tta, const TT& ttb )
+inline TT binary_and( const TT& tta, const TT& ttb )
 {
   return binary_operation<Operation::AND, UseCache>( tta, ttb );
 }
@@ -226,7 +228,7 @@ inline TT bitwise_and( const TT& tta, const TT& ttb )
  * \return The truth table obtained by applying the binary OR.
  */
 template<typename TT, bool UseCache = true>
-inline TT bitwise_or( const TT& tta, const TT& ttb )
+inline TT binary_or( const TT& tta, const TT& ttb )
 {
   return binary_operation<Operation::OR, UseCache>( tta, ttb );
 }
@@ -243,7 +245,7 @@ inline TT bitwise_or( const TT& tta, const TT& ttb )
  * \return The truth table obtained by applying the binary XOR.
  */
 template<typename TT, bool UseCache = true>
-inline TT bitwise_xor( const TT& tta, const TT& ttb )
+inline TT binary_xor( const TT& tta, const TT& ttb )
 {
   return binary_operation<Operation::XOR, UseCache>( tta, ttb );
 }
@@ -260,7 +262,7 @@ inline TT bitwise_xor( const TT& tta, const TT& ttb )
  * \return The truth table obtained by applying the binary LT.
  */
 template<typename TT, bool UseCache = true>
-inline TT bitwise_lt( const TT& tta, const TT& ttb )
+inline TT binary_lt( const TT& tta, const TT& ttb )
 {
   return binary_operation<Operation::LT, UseCache>( tta, ttb );
 }
@@ -284,7 +286,7 @@ inline TT unary_not( const TT& tt )
 
   size_t i = 0;
 #if KITTY_HAS_AVX2
-  if ( has_avx2_cached() && ( !UseCache || use_avx2_cached<Operation::NOT>() ) )
+  if ( has_avx2_cached() && ( !UseCache || use_avx2_cached<Operation::NOT, TT>( tt, tt.num_vars() ) ) )
   {
     const __m256i all_ones = _mm256_set1_epi64x( -1 );
     for ( ; i + 3 < size; i += 4 )
@@ -321,7 +323,7 @@ inline void set_const( TT& tt )
   size_t i = 0;
 #if KITTY_HAS_AVX2
 
-  if ( has_avx2_cached() && ( !UseCache || use_avx2_cached<Op>() ) )
+  if ( has_avx2_cached() && ( !UseCache || use_avx2_cached<Op, TT>( tt, tt.num_vars() ) ) )
   {
     __m256i v;
     if constexpr ( Op == Operation::CONST0 )
@@ -388,10 +390,10 @@ class benchmarking
 {
   static constexpr auto num_cases = 100u;
   static constexpr double eps = 0.1;
-  bool const has_avx2 = has_avx2_cached();
+
 public:
   template<typename FnSisd, typename FnSimd, typename TT>
-  bool test_noreturn( FnSisd fn_sisd, FnSimd fn_simd, TT& tt ) const
+  bool test_noreturn( FnSisd fn_sisd, FnSimd fn_simd, TT const& tt ) const
   {
     TT tt1 = tt.construct();
     TT tt2 = tt.construct();
@@ -400,8 +402,8 @@ public:
     double time_simd = 0;
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
-      tt2 = tt1;
+      create_random( tt1, i );
+      create_random( tt2, i );
 
       run_noreturn_with_time<FnSisd, TT>( fn_sisd, tt1, time_sisd );
       run_noreturn_with_time<FnSimd, TT>( fn_simd, tt2, time_simd );
@@ -409,6 +411,7 @@ public:
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
+    bool const has_avx2 = has_avx2_cached();
     if ( has_avx2 )
     {
       return time_diff < -eps;
@@ -426,7 +429,7 @@ public:
     TT tt1 = tt.construct();
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
+      create_random( tt1, i );
 
       run_with_time<FnSisd, TT>( fn_sisd, tt1, time_sisd );
       run_with_time<FnSimd, TT>( fn_simd, tt1, time_simd );
@@ -434,6 +437,7 @@ public:
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
+    bool const has_avx2 = has_avx2_cached();
     if ( has_avx2 )
     {
       return time_diff < -eps;
@@ -452,7 +456,7 @@ public:
     TT tt2 = tt.construct();
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
+      create_random( tt1, i );
 
       run_with_time<FnSisd, TT>( fn_sisd, tt1, tt2, time_sisd );
       run_with_time<FnSimd, TT>( fn_simd, tt1, tt2, time_simd );
@@ -460,6 +464,7 @@ public:
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2
+    bool const has_avx2 = has_avx2_cached();
     if ( has_avx2 )
     {
       return time_diff < -eps;
@@ -501,134 +506,170 @@ public:
   }
 };
 
-template<>
-inline bool use_avx2_cached<Operation::AND>()
+template<Operation Op, typename TT, typename FnSisd, typename FnSimd>
+inline bool use_avx2_cached( TT const& tt, FnSisd fn_sisd, FnSimd fn_simd, uint32_t num_vars )
 {
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
+  static std::unordered_map<int, bool> cache;
+  static std::mutex mutex;
+
   {
-    benchmarking b;
-    TT tt;
-    return b.test_binary( []( const TT& t1, const TT& t2 )
-                          { return t1 & t2; },
-                          []( const TT& t1, const TT& t2 )
-                          { return simd::bitwise_and<TT, false>( t1, t2 ); },
-                          tt );
-  }();
-  return cached;
+    std::lock_guard<std::mutex> lock( mutex );
+    auto it = cache.find( num_vars );
+    if ( it != cache.end() )
+    {
+      return it->second;
+    }
+  }
+
+  // Not cached yet — compute it
+  benchmarking b;
+  bool result = false;
+
+  if constexpr ( Op == Operation::CONST0 || Op == Operation::CONST1 )
+  {
+    result = b.test_noreturn(
+        fn_sisd,
+        fn_simd,
+        tt );
+  }
+  else if constexpr ( Op == Operation::NOT )
+  {
+    result = b.test_unary(
+        fn_sisd,
+        fn_simd,
+        tt );
+  }
+  else
+  {
+    result = b.test_binary(
+        fn_sisd,
+        fn_simd,
+        tt );
+  }
+
+  {
+    std::lock_guard<std::mutex> lock( mutex );
+    cache[num_vars] = result;
+  }
+
+  return result;
 }
 
-template<>
-inline bool use_avx2_cached<Operation::OR>()
+template<Operation Op, typename TT>
+struct use_avx2_cached_impl
 {
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
+  bool eval( TT const& tt, uint32_t num_vars )
   {
-    benchmarking b;
-    TT tt;
-    return b.test_binary( []( const TT& t1, const TT& t2 )
-                          { return t1 | t2; },
-                          []( const TT& t1, const TT& t2 )
-                          { return simd::bitwise_or<TT, false>( t1, t2 ); },
-                          tt );
-  }();
-  return cached;
+    static_assert( Op != Op, "use_avx2_cached_impl not specialized for this Operation" );
+    return false;
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::AND, TT>
+{
+  bool eval( TT const& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::AND>( tt, []( const TT& t1, const TT& t2 )
+                                            { return kitty::binary_and( t1, t2 ); }, []( const TT& t1, const TT& t2 )
+                                            { return simd::binary_and<TT, false>( t1, t2 ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::OR, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::OR>( tt, []( const TT& t1, const TT& t2 )
+                                           { return kitty::binary_or( t1, t2 ); }, []( const TT& t1, const TT& t2 )
+                                           { return simd::binary_or<TT, false>( t1, t2 ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::XOR, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::XOR>( tt, []( const TT& t1, const TT& t2 )
+                                            { return kitty::binary_xor( t1, t2 ); }, []( const TT& t1, const TT& t2 )
+                                            { return simd::binary_xor<TT, false>( t1, t2 ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::LT, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::LT>( tt, []( const TT& t1, const TT& t2 )
+                                           { return kitty::binary_and( ~t1, t2 ); }, []( const TT& t1, const TT& t2 )
+                                           { return simd::binary_lt<TT, false>( t1, t2 ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::NOT, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::NOT>( tt, []( const TT& t )
+                                            { return kitty::unary_not( t ); }, []( const TT& t )
+                                            { return simd::unary_not<TT, false>( t ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::CONST0, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::CONST0>( tt, []( TT& t )
+                                               { t = t ^ t; }, []( TT& t )
+                                               { simd::set_zero<TT, false>( t ); }, num_vars );
+  }
+};
+
+template<typename TT>
+struct use_avx2_cached_impl<Operation::CONST1, TT>
+{
+  bool eval( const TT& tt, uint32_t num_vars )
+  {
+    return use_avx2_cached<Operation::CONST1>( tt, []( TT& t )
+                                               { t = t ^ ~t; }, []( TT& t )
+                                               { simd::set_ones<TT, false>( t ); }, num_vars );
+  }
+};
+
+template<Operation Op, typename TT>
+inline bool use_avx2_cached( TT const& tt, uint32_t num_vars )
+{
+  use_avx2_cached_impl<Op, TT> impl;
+  return impl.eval( tt, num_vars );
 }
 
-template<>
-inline bool use_avx2_cached<Operation::XOR>()
+/*! \brief Test and caches if it is better to use the scalar or the vector version.
+ *
+ * Each operation is tested once for the specified truth table type and for the
+ * specified number of variables. The benchmarking determines if the vectorized ( AVX2 )
+ * implementation should be preferred for this machin, truth table size, and truth table
+ * type.
+ *
+ * \tparam TT Truth table type.
+ * \param tt Reference truth table needed for construction purposes.
+ * \param num_vars Number of variables in the truth table.
+ */
+template<typename TT>
+void test_avx2_advantage( TT const& tt, uint32_t num_vars )
 {
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
-  {
-    benchmarking b;
-    TT tt;
-    return b.test_binary( []( const TT& t1, const TT& t2 )
-                          { return t1 ^ t2; },
-                          []( const TT& t1, const TT& t2 )
-                          { return simd::bitwise_xor<TT, false>( t1, t2 ); },
-                          tt );
-  }();
-  return cached;
-}
-
-template<>
-inline bool use_avx2_cached<Operation::LT>()
-{
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
-  {
-    benchmarking b;
-    TT tt;
-    return b.test_binary( []( const TT& t1, const TT& t2 )
-                          { return ~t1 & t2; },
-                          []( const TT& t1, const TT& t2 )
-                          { return simd::bitwise_lt<TT, false>( t1, t2 ); },
-                          tt );
-  }();
-  return cached;
-}
-
-template<>
-inline bool use_avx2_cached<Operation::NOT>()
-{
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
-  {
-    benchmarking b;
-    TT tt;
-    return b.test_unary( []( const TT& t )
-                         { return ~t; },
-                         []( const TT& t )
-                         { return simd::unary_not<TT, false>( t ); },
-                         tt );
-  }();
-  return cached;
-}
-
-template<>
-inline bool use_avx2_cached<Operation::CONST0>()
-{
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
-  {
-    benchmarking b;
-    TT tt;
-    return b.test_noreturn( []( TT& t )
-                            { t = t ^ t; },
-                            []( TT& t )
-                            { simd::set_zero<TT, false>( t ); },
-                            tt );
-  }();
-  return cached;
-}
-
-template<>
-inline bool use_avx2_cached<Operation::CONST1>()
-{
-  using TT = kitty::static_truth_table<10u>;
-  static const bool cached = []
-  {
-    benchmarking b;
-    TT tt;
-    return b.test_noreturn( []( TT& t )
-                            { t = t | ~t; },
-                            []( TT& t )
-                            { simd::set_ones<TT, false>( t ); },
-                            tt );
-  }();
-  return cached;
-}
-
-void test_avx2_advantage()
-{
-  use_avx2_cached<Operation::AND>();
-  use_avx2_cached<Operation::OR>();
-  use_avx2_cached<Operation::XOR>();
-  use_avx2_cached<Operation::LT>();
-  use_avx2_cached<Operation::NOT>();
-  use_avx2_cached<Operation::CONST0>();
-  use_avx2_cached<Operation::CONST1>();
+  use_avx2_cached<Operation::AND, TT>( tt, num_vars );
+  use_avx2_cached<Operation::OR, TT>( tt, num_vars );
+  use_avx2_cached<Operation::XOR, TT>( tt, num_vars );
+  use_avx2_cached<Operation::LT, TT>( tt, num_vars );
+  use_avx2_cached<Operation::NOT, TT>( tt, num_vars );
+  use_avx2_cached<Operation::CONST0, TT>( tt, num_vars );
+  use_avx2_cached<Operation::CONST1, TT>( tt, num_vars );
 }
 
 /*! Fallback to the default unary NOT for small static truth tables. */
@@ -640,28 +681,28 @@ inline kitty::static_truth_table<NumVars> unary_not( kitty::static_truth_table<N
 
 /*! Fallback to the default bitwise AND for small static truth tables. */
 template<uint32_t NumVars>
-inline kitty::static_truth_table<NumVars> bitwise_and( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
+inline kitty::static_truth_table<NumVars> binary_and( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta & ttb;
 }
 
 /*! Fallback to the default bitwise OR for small static truth tables. */
 template<uint32_t NumVars>
-inline kitty::static_truth_table<NumVars> bitwise_or( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
+inline kitty::static_truth_table<NumVars> binary_or( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta | ttb;
 }
 
 /*! Fallback to the default bitwise XOR for small static truth tables. */
 template<uint32_t NumVars>
-inline kitty::static_truth_table<NumVars> bitwise_xor( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
+inline kitty::static_truth_table<NumVars> binary_xor( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return tta ^ ttb;
 }
 
 /*! Fallback to the default bitwise LT for small static truth tables. */
 template<uint32_t NumVars>
-inline kitty::static_truth_table<NumVars> bitwise_lt( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
+inline kitty::static_truth_table<NumVars> binary_lt( const kitty::static_truth_table<NumVars, true>& tta, const kitty::static_truth_table<NumVars, true>& ttb )
 {
   return ~tta & ttb;
 }

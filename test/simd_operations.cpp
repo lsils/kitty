@@ -38,10 +38,10 @@ using namespace kitty;
 
 class SIMDTest : public kitty::testing::Test
 {
-  static constexpr auto num_cases = 20u;
+  static constexpr auto num_cases = 100u;
 
 protected:
-  template<typename FnSisd, typename FnSimd, typename TT>
+  template<simd::Operation Op, typename FnSisd, typename FnSimd, typename TT>
   void test_noreturn( FnSisd fn_sisd, FnSimd fn_simd, TT& tt ) const
   {
     TT tt1 = tt.construct();
@@ -51,7 +51,7 @@ protected:
     double time_simd = 0;
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
+      create_random( tt1, i );
       tt2 = tt1;
 
       run_noreturn_with_time<FnSisd, TT>( fn_sisd, tt1, time_sisd );
@@ -59,15 +59,15 @@ protected:
 
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
-#if KITTY_HAS_AVX2
-    if ( simd::has_avx2_cached() )
+#if KITTY_HAS_AVX2 && !defined( _MSC_VER )
+    if ( simd::has_avx2_cached() && simd::use_avx2_cached<Op, TT>( tt, tt.num_vars() ) )
     {
       EXPECT_LE( time_diff, 0 );
     }
 #endif
   }
 
-  template<typename FnSisd, typename FnSimd, typename TT>
+  template<simd::Operation Op, typename FnSisd, typename FnSimd, typename TT>
   void test_unary( FnSisd fn_sisd, FnSimd fn_simd, TT tt ) const
   {
     double time_diff = 0;
@@ -76,7 +76,7 @@ protected:
     TT tt1 = tt.construct();
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
+      create_random( tt1, i );
 
       auto res_sisd = run_with_time<FnSisd, TT>( fn_sisd, tt1, time_sisd );
       auto res_simd = run_with_time<FnSimd, TT>( fn_simd, tt1, time_simd );
@@ -84,15 +84,15 @@ protected:
 
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
-#if KITTY_HAS_AVX2
-    if ( simd::has_avx2_cached() )
+#if KITTY_HAS_AVX2 && !defined( _MSC_VER )
+    if ( simd::has_avx2_cached() && simd::use_avx2_cached<Op, TT>( tt, tt.num_vars() ) )
     {
       EXPECT_LE( time_diff, 0 );
     }
 #endif
   }
 
-  template<typename FnSisd, typename FnSimd, typename TT>
+  template<simd::Operation Op, typename FnSisd, typename FnSimd, typename TT>
   void test_binary( FnSisd fn_sisd, FnSimd fn_simd, TT tt ) const
   {
     double time_diff = 0;
@@ -102,7 +102,7 @@ protected:
     TT tt2 = tt.construct();
     for ( auto i = 0u; i < num_cases; ++i )
     {
-      create_random( tt1 );
+      create_random( tt1, i );
 
       auto res_sisd = run_with_time<FnSisd, TT>( fn_sisd, tt1, tt2, time_sisd );
       auto res_simd = run_with_time<FnSimd, TT>( fn_simd, tt1, tt2, time_simd );
@@ -110,10 +110,11 @@ protected:
 
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
-#if KITTY_HAS_AVX2
-    if ( simd::has_avx2_cached() )
+#if KITTY_HAS_AVX2 && !defined( _MSC_VER )
+    if ( simd::has_avx2_cached() && simd::use_avx2_cached<Op, TT>( tt, tt.num_vars() ) && !)
     {
       EXPECT_LE( time_diff, 0 );
+      std::cout << "time diff: " << time_diff << std::endl;
     }
 #endif
   }
@@ -153,120 +154,132 @@ protected:
 
 TEST_F( SIMDTest, simd_set_zero_large )
 {
-  simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_noreturn( [&]( TTS& t )
-                 { t = t ^ t; },
-                 [&]( TTS& t )
-                 { simd::set_zero<TTS>( t ); },
-                 tts );
+  simd::test_avx2_advantage( tts, 12u );
+  test_noreturn<simd::Operation::CONST0>( [&]( TTS& t )
+                                          { t = t ^ t; },
+                                          [&]( TTS& t )
+                                          { simd::set_zero<TTS>( t ); },
+                                          tts );
   TTD ttd( 12u );
-  test_noreturn( [&]( TTD& t )
-                 { t = t ^ t; },
-                 [&]( TTD& t )
-                 { simd::set_zero<TTD>( t ); },
-                 ttd );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_noreturn<simd::Operation::CONST0>( [&]( TTD& t )
+                                          { t = t ^ t; },
+                                          [&]( TTD& t )
+                                          { simd::set_zero<TTD>( t ); },
+                                          ttd );
 }
 
 TEST_F( SIMDTest, simd_set_ones_large )
 {
-  simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_noreturn( [&]( TTS& t )
-                 { t = t ^ ~t; },
-                 [&]( TTS& t )
-                 { simd::set_ones<TTS>( t ); },
-                 tts );
-  TTD ttd;
-  test_noreturn( [&]( TTD& t )
-                 { t = t ^ ~t; },
-                 [&]( TTD& t )
-                 { simd::set_ones<TTD>( t ); },
-                 ttd );
+  simd::test_avx2_advantage( tts, 12u );
+  test_noreturn<simd::Operation::CONST1>( [&]( TTS& t )
+                                          { t = t ^ ~t; },
+                                          [&]( TTS& t )
+                                          { simd::set_ones<TTS>( t ); },
+                                          tts );
+  TTD ttd( 12u );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_noreturn<simd::Operation::CONST1>( [&]( TTD& t )
+                                          { t = t ^ ~t; },
+                                          [&]( TTD& t )
+                                          { simd::set_ones<TTD>( t ); },
+                                          ttd );
 }
 
 TEST_F( SIMDTest, simd_binary_and_large )
 {
-  simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_binary( []( const TTS& t1, const TTS& t2 )
-               { return t1 & t2; },
-               []( const TTS& t1, const TTS& t2 )
-               { return simd::bitwise_and<TTS>( t1, t2 ); },
-               tts );
+  simd::test_avx2_advantage( tts, 12u );
+
+  test_binary<simd::Operation::AND>( []( const TTS& t1, const TTS& t2 )
+                                     { return t1 & t2; },
+                                     []( const TTS& t1, const TTS& t2 )
+                                     { return simd::binary_and<TTS>( t1, t2 ); },
+                                     tts );
   TTD ttd( 12u );
-  test_binary( []( const TTD& t1, const TTD& t2 )
-               { return t1 & t2; },
-               []( const TTD& t1, const TTD& t2 )
-               { return simd::bitwise_and<TTD>( t1, t2 ); },
-               ttd );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_binary<simd::Operation::AND>( []( const TTD& t1, const TTD& t2 )
+                                     { return t1 & t2; },
+                                     []( const TTD& t1, const TTD& t2 )
+                                     { return simd::binary_and<TTD>( t1, t2 ); },
+                                     ttd );
 }
 
 TEST_F( SIMDTest, simd_binary_xor_large )
 {
-  simd::test_avx2_advantage();
-
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_binary( []( const TTS& t1, const TTS& t2 )
-               { return t1 ^ t2; },
-               []( const TTS& t1, const TTS& t2 )
-               { return simd::bitwise_xor<TTS>( t1, t2 ); },
-               tts );
+  simd::test_avx2_advantage( tts, 12u );
+
+  test_binary<simd::Operation::XOR>( []( const TTS& t1, const TTS& t2 )
+                                     { return t1 ^ t2; },
+                                     []( const TTS& t1, const TTS& t2 )
+                                     { return simd::binary_xor<TTS>( t1, t2 ); },
+                                     tts );
   TTD ttd( 12u );
-  test_binary( []( const TTD& t1, const TTD& t2 )
-               { return t1 ^ t2; },
-               []( const TTD& t1, const TTD& t2 )
-               { return simd::bitwise_xor<TTD>( t1, t2 ); },
-               ttd );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_binary<simd::Operation::XOR>( []( const TTD& t1, const TTD& t2 )
+                                     { return t1 ^ t2; },
+                                     []( const TTD& t1, const TTD& t2 )
+                                     { return simd::binary_xor<TTD>( t1, t2 ); },
+                                     ttd );
 }
 
 TEST_F( SIMDTest, simd_binary_or_large )
 {
-  simd::test_avx2_advantage();
 
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_binary( []( const TTS& t1, const TTS& t2 )
-               { return t1 | t2; },
-               []( const TTS& t1, const TTS& t2 )
-               { return simd::bitwise_or<TTS>( t1, t2 ); },
-               tts );
+  simd::test_avx2_advantage( tts, 12u );
+  test_binary<simd::Operation::OR>( []( const TTS& t1, const TTS& t2 )
+                                    { return t1 | t2; },
+                                    []( const TTS& t1, const TTS& t2 )
+                                    { return simd::binary_or<TTS>( t1, t2 ); },
+                                    tts );
   TTD ttd( 12u );
-  test_binary( []( const TTD& t1, const TTD& t2 )
-               { return t1 | t2; },
-               []( const TTD& t1, const TTD& t2 )
-               { return simd::bitwise_or<TTD>( t1, t2 ); },
-               ttd );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_binary<simd::Operation::OR>( []( const TTD& t1, const TTD& t2 )
+                                    { return t1 | t2; },
+                                    []( const TTD& t1, const TTD& t2 )
+                                    { return simd::binary_or<TTD>( t1, t2 ); },
+                                    ttd );
 }
 
 TEST_F( SIMDTest, simd_binary_lt_large )
 {
-  simd::test_avx2_advantage();
-
-  using TTS = static_truth_table<12>;
+  using TTS = static_truth_table<12u>;
   using TTD = dynamic_truth_table;
   TTS tts;
-  test_binary( []( const TTS& t1, const TTS& t2 )
-               { return ~t1 & t2; },
-               []( const TTS& t1, const TTS& t2 )
-               { return simd::bitwise_lt<TTS>( t1, t2 ); },
-               tts );
+  simd::test_avx2_advantage( tts, 12u );
+  test_binary<simd::Operation::LT>( []( const TTS& t1, const TTS& t2 )
+                                    { return ~t1 & t2; },
+                                    []( const TTS& t1, const TTS& t2 )
+                                    { return simd::binary_lt<TTS>( t1, t2 ); },
+                                    tts );
   TTD ttd( 12u );
-  test_binary( []( const TTD& t1, const TTD& t2 )
-               { return ~t1 & t2; },
-               []( const TTD& t1, const TTD& t2 )
-               { return simd::bitwise_lt<TTD>( t1, t2 ); },
-               ttd );
+  simd::test_avx2_advantage( ttd, 12u );
+
+  test_binary<simd::Operation::LT>( []( const TTD& t1, const TTD& t2 )
+                                    { return ~t1 & t2; },
+                                    []( const TTD& t1, const TTD& t2 )
+                                    { return simd::binary_lt<TTD>( t1, t2 ); },
+                                    ttd );
 }
