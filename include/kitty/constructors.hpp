@@ -46,8 +46,9 @@
 #include "dynamic_truth_table.hpp"
 #include "operations.hpp"
 #include "operators.hpp"
-#include "static_truth_table.hpp"
 #include "partial_truth_table.hpp"
+#include "static_truth_table.hpp"
+#include "ternary_truth_table.hpp"
 
 namespace kitty
 {
@@ -155,6 +156,15 @@ void create_nth_var( static_truth_table<NumVars, true>& tt, uint8_t var_index, b
   /* assign from precomputed table */
   tt._bits = complement ? ~detail::projections[var_index] : detail::projections[var_index];
 
+  /* mask if truth table does not require all bits */
+  tt.mask_bits();
+}
+
+template<typename TT>
+void create_nth_var( ternary_truth_table<TT>& tt, uint8_t var_index, bool complement = false )
+{
+  create_nth_var( tt._bits, var_index, complement );
+  tt._care = ~( tt._bits.construct() );
   /* mask if truth table does not require all bits */
   tt.mask_bits();
 }
