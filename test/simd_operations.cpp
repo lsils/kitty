@@ -111,10 +111,9 @@ protected:
       time_diff += ( time_simd - time_sisd ) / time_sisd / static_cast<double>( num_cases );
     }
 #if KITTY_HAS_AVX2 && !defined( _MSC_VER )
-    if ( simd::has_avx2_cached() && simd::use_avx2_cached<Op, TT>( tt, tt.num_vars() ) && !)
+    if ( simd::has_avx2_cached() && simd::use_avx2_cached<Op, TT>( tt, tt.num_vars() ) )
     {
       EXPECT_LE( time_diff, 0 );
-      std::cout << "time diff: " << time_diff << std::endl;
     }
 #endif
   }
