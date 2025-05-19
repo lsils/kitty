@@ -1481,3 +1481,34 @@ TEST_F( OperationsTest, shift_mask_for_quaternary )
   EXPECT_EQ( tttabd, quaternary_truth_table<dynamic_truth_table>( from_hex( 4, "a124" ), from_hex( 4, "55a5" ) ) );
   EXPECT_EQ( shift_with_mask( ttt, 0b1110 ), quaternary_truth_table<dynamic_truth_table>( from_hex( 4, "c142" ), from_hex( 4, "33c3" ) ) );
 }
+
+TEST_F( OperationsTest, ternary_operations_exploiting_dont_cares )
+{
+  using TT = kitty::static_truth_table<5u>;
+  TT bits, care, evol[5];
+  kitty::create_from_hex_string( bits, "80000000" );
+  kitty::create_from_hex_string( care, "80000000" );
+  kitty::create_from_hex_string( evol[0], "C0000000" );
+  kitty::create_from_hex_string( evol[1], "F0000000" );
+  kitty::create_from_hex_string( evol[2], "FF000000" );
+  kitty::create_from_hex_string( evol[3], "FFFF0000" );
+  kitty::create_from_hex_string( evol[4], "FFFFFFFF" );
+  auto tt = ternary_truth_table<TT>( bits, care );
+  std::array<bool, 5u> vars;
+  static constexpr bool UseDCs = true;
+  for ( int i = 0; i < 5; i++ )
+  {
+    vars[i] = has_var_inplace<TT, !UseDCs>( tt, i );
+    EXPECT_EQ( vars[i], true );
+    vars[i] = has_var_inplace<TT, UseDCs>( tt, i );
+    EXPECT_EQ( vars[i], false );
+    EXPECT_EQ( tt._bits, evol[i] );
+    EXPECT_EQ( tt._care, evol[i] );
+  }
+  tt = ternary_truth_table<TT>( bits, care );
+  std::vector<uint8_t> supp;
+  supp = kitty::min_base_inplace<TT, !UseDCs>( tt );
+  EXPECT_EQ( supp.size(), 5 );
+  supp = kitty::min_base_inplace<TT, UseDCs>( tt );
+  EXPECT_EQ( supp.size(), 0 );
+}
