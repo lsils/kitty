@@ -1579,6 +1579,45 @@ std::vector<uint8_t> min_base_inplace( TT& tt )
   return support;
 }
 
+/*! \brief Reorders truth table to have minimum base
+
+  This function will reorder variables, such that there are no
+  "holes".  For example, the function \f$ x_0 \land x_2 \f$ will be
+  changed to \f$ x_0 \land x_1 \f$ by swapping \f$ x_1 \f$ with \f$
+  x_2 \f$.  That is all variables that are not in the functional
+  support will be moved to the back.  Note that the size of the truth
+  table is not changed, because for `static_truth_table` one cannot
+  compute it at compile-time.
+
+  The function changes the truth table and returns a vector with all
+  variable indexes that were in the functional support of the original
+  function.
+
+  \param tt Truth table
+ */
+template<typename TT, bool UseDCs, typename = std::enable_if_t<is_complete_truth_table<TT>::value>>
+std::vector<uint8_t> min_base_inplace( ternary_truth_table<TT>& tt )
+{
+  std::vector<uint8_t> support;
+
+  auto k = 0u;
+  for ( auto i = 0u; i < tt.num_vars(); ++i )
+  {
+    if ( !has_var<TT, UseDCs>( tt, i ) )
+    {
+      continue;
+    }
+    if ( k < i )
+    {
+      swap_inplace( tt, k, i );
+    }
+    support.push_back( i );
+    ++k;
+  }
+
+  return support;
+}
+
 /*! \brief Expands truth table from minimum base to original based on support
 
   This is the inverse operation to `min_base_inplace`, where the
