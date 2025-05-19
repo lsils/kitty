@@ -852,7 +852,7 @@ bool has_var( const quaternary_truth_table<TT>& tt, uint8_t var_index )
   \param var_index Variable index
 */
 template<typename TT, bool UseDCs = false, typename = std::enable_if_t<is_complete_truth_table<TT>::value>>
-bool has_var( ternary_truth_table<TT>& tt, uint8_t var_index )
+bool has_var_inplace( ternary_truth_table<TT>& tt, uint8_t var_index )
 {
   if constexpr ( UseDCs )
   {
@@ -873,6 +873,31 @@ bool has_var( ternary_truth_table<TT>& tt, uint8_t var_index )
   {
     return has_var( tt._bits, var_index );
   }
+}
+
+/*! \brief Checks whether a ternary truth table depends on given variable index.\
+
+           When the template parameter UseDCs is false, don't cares are treated like zeros.
+           When the template parameter UseDCs is true, this function returns:
+           - true if the onset shows that the function depends on the variable.
+           - false if a don't cares assignments makes the function independent of the variable.
+
+           For example, let the hexadecimal representation of the onset be 0xF0000000, and
+           the hexadecimal representation of the careset be 0xF0000000. This function is
+           independent of the variable 2, with projection function 0xF0F0F0F0 for the following
+           onset, careset pair ( 0xFF000000, 0xFF000000 ).
+
+           Warning. This function DOES NOT perform the reassignment. Use has_var_inplace if that
+           is the desired behavior.
+
+  \param tt Truth table
+  \param var_index Variable index
+*/
+template<typename TT, bool UseDCs = false, typename = std::enable_if_t<is_complete_truth_table<TT>::value>>
+bool has_var( ternary_truth_table<TT> const& tt, uint8_t var_index )
+{
+  ternary_truth_table<TT> ttc = tt;
+  return has_var_inplace<TT, UseDCs>( ttc, var_index );
 }
 
 /*! \brief Computes the next lexicographically larger truth table

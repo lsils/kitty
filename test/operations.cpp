@@ -1498,9 +1498,9 @@ TEST_F( OperationsTest, ternary_operations_exploiting_dont_cares )
   static constexpr bool UseDCs = true;
   for ( int i = 0; i < 5; i++ )
   {
-    vars[i] = has_var<TT, !UseDCs>( tt, i );
+    vars[i] = has_var_inplace<TT, !UseDCs>( tt, i );
     EXPECT_EQ( vars[i], true );
-    vars[i] = has_var<TT, UseDCs>( tt, i );
+    vars[i] = has_var_inplace<TT, UseDCs>( tt, i );
     EXPECT_EQ( vars[i], false );
     EXPECT_EQ( tt._bits, evol[i] );
     EXPECT_EQ( tt._care, evol[i] );
