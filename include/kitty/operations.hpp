@@ -768,18 +768,6 @@ bool has_var( const static_truth_table<NumVars, true>& tt, uint8_t var_index )
 }
 /*! \endcond */
 
-/*! \brief Checks whether a ternary truth table depends on given variable index
-           Don't cares are treated like zeros.
-
-  \param tt Truth table
-  \param var_index Variable index
-*/
-template<typename TT>
-bool has_var( const ternary_truth_table<TT>& tt, uint8_t var_index )
-{
-  return has_var( tt._bits, var_index );
-}
-
 /*! \brief Checks whether a quaternary truth table depends on given variable index.
            This function returns false if the truth table potentially does not depend
            on the variable (due to don't cares) and returns true if the truth table potentially
@@ -842,6 +830,49 @@ bool has_var( const quaternary_truth_table<TT>& tt, uint8_t var_index )
     }
   }
   return false;
+}
+
+/*! \brief Checks whether a ternary truth table depends on given variable index.\
+
+           When the template parameter UseDCs is false, don't cares are treated like zeros.
+           When the template parameter UseDCs is true, this function returns:
+           - true if the onset shows that the function depends on the variable.
+           - false if a don't cares assignments makes the function independent of the variable.
+
+           For example, let the hexadecimal representation of the onset be 0xF0000000, and
+           the hexadecimal representation of the careset be 0xF0000000. This function is
+           independent of the variable 2, with projection function 0xF0F0F0F0 for the following
+           onset, careset pair ( 0xFF000000, 0xFF000000 ).
+
+           Reassigning the careset and the onset is essential when checking if an incompletely
+           specified function depends on multiple variables, since different variables might
+           require different don't cares assignments to achieve indendence on different variables.
+
+  \param tt Truth table
+  \param var_index Variable index
+*/
+template<typename TT, bool UseDCs = false, typename = std::enable_if_t<is_complete_truth_table<TT>::value>>
+bool has_var( ternary_truth_table<TT>& tt, uint8_t var_index )
+{
+  if constexpr ( UseDCs )
+  {
+    ternary_truth_table<TT> tt0 = tt;
+    ternary_truth_table<TT> tt1 = tt;
+    cofactor0_inplace( tt0, var_index );
+    cofactor1_inplace( tt1, var_index );
+    const TT diff = tt0._bits ^ tt1._bits;
+    const TT mask = tt0._care & tt1._care;
+    if ( kitty::count_ones( diff & mask ) > 0 )
+      return true;
+    /* Adjust the careset and the onset to avoid contradictions. */
+    tt._care |= ( ~mask ) & diff;
+    tt._bits = tt0._bits | tt1._bits;
+    return false;
+  }
+  else
+  {
+    return has_var( tt._bits, var_index );
+  }
 }
 
 /*! \brief Computes the next lexicographically larger truth table

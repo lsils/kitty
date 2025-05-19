@@ -10,6 +10,7 @@ Predicates
    equal
    less_than
    has_var
+   has_var_inplace
    is_const0
    implies
    intersection_is_empty
