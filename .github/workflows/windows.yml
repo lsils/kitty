@@ -3,29 +3,32 @@ name: Windows CI
 on:
   push:
     branches:
-    - master
+      - master
   pull_request:
     branches:
-    - master
+      - master
 
 jobs:
   build:
-    runs-on: windows-2019
+    runs-on: windows-2022
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
       with:
         submodules: true
     - name: Create build directory
       run: mkdir build
     - name: Run CMake
-      run: cmake -G "Visual Studio 16 2019" -DKITTY_TEST=ON ..
+      run: cmake -G "Visual Studio 17 2022" -DKITTY_TEST=ON ..
       working-directory: ./build
-    - name: Build kitty
+    - name: Check Visual Studio installation
       run: |
-        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" kitty.sln /t:run_tests
+        & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+    - name: Build kitty
+      run: msbuild kitty.sln /t:run_tests
       working-directory: ./build
-      shell: cmd
     - name: Run tests
       run: |
         cd build
