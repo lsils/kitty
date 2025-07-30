@@ -354,6 +354,12 @@ inline uint64_t count_ones( const static_truth_table<NumVars, true>& tt )
 {
   return __builtin_popcountll( tt._bits );
 }
+
+template<typename TT>
+inline uint64_t count_ones( const ternary_truth_table<TT>& tt )
+{
+  return count_ones( tt._bits & tt._care );
+}
 /*! \endcond */
 
 /*! \brief Count zeros in truth table
