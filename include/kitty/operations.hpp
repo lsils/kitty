@@ -531,10 +531,28 @@ inline bool equal( const partial_truth_table& first, const partial_truth_table& 
   return binary_predicate( first, second, std::equal_to<>() );
 } /*! \endcond */
 
-template<typename TT>
+/*! \brief Checks whether two incompletely specified truth tables are equal
+
+  The template parameter UseDCs allows us to decide if to check for possible assignment
+  of the don't cares to achieve equality:
+  - UseDCs = false : Checks if both the careset and the onset coincide
+  - UseDCs = true  : Checks if there is an assignment of the don't cares making the functions equal.
+
+  \param first First truth table
+  \param second Second truth table
+*/
+template<typename TT, bool UseDCs = false>
 inline bool equal( const ternary_truth_table<TT>& first, const ternary_truth_table<TT>& second )
 {
-  return equal( first._bits, second._bits ) && equal( first._care, second._care );
+  if constexpr ( UseDCs )
+  {
+    const auto care_mask = first._care & second._care;
+    return equal( first._bits & care_mask, second._bits & care_mask );
+  }
+  else
+  {
+    return equal( first._bits, second._bits ) && equal( first._care, second._care );
+  }
 }
 
 template<typename TT>
@@ -645,11 +663,19 @@ inline bool is_const0( const static_truth_table<NumVars, true>& tt )
 
   \param tt Truth table
 */
-template<typename TT>
+template<typename TT, bool UseDCs = false>
 inline bool is_const0( const ternary_truth_table<TT>& tt )
 {
-  return is_const0( tt._bits | ~tt._care );
+  if constexpr ( UseDCs )
+  {
+    return is_const0( tt._bits & tt._care );
+  }
+  else
+  {
+    return is_const0( tt._bits | ~tt._care );
+  }
 }
+
 
 /*! \brief Checks whether a quaternary truth table is constant composed by only - and 0.
 
